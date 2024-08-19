@@ -1,0 +1,14 @@
+workspace = { members = [ "config", "metrics", "network", "packets"] }
+
+[package]
+name = "rshark"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+network = { path = "network" }
+config = { path = "config" }
+packets = { path = "packets" }
+metrics = { path = "metrics" }
+env_logger = "0.11.5"
+log = "0.4.22"
