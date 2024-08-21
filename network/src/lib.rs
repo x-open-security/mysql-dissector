@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::mem::swap;
 use std::ops::Deref;
+use packets::mysql::MySQLPacket;
 
 pub struct Capture {
     session_manager: SessionManager,
@@ -47,11 +48,6 @@ impl Capture {
         loop {
             match rx.next() {
                 Ok(packet) => {
-                    // let pkt = self.session_manager.format_pkt_layer(&packet);
-                    // if pkt.is_none() {
-                    //     continue;
-                    // }
-                    // let pkt = pkt.unwrap();
                     self.session_manager.accept(packet);
                 }
                 Err(e) => {
@@ -185,13 +181,13 @@ impl SessionManager {
             None => return,
         };
 
-
         let session_key = pkt.session_key.clone();
         let db_type = pkt.db.clone();
-
+        info!("Session key: {:?}, DB: {:?}", session_key, db_type);
         if !self.sessions.contains_key(&session_key) {
             let session = self.create_session(pkt.clone(), db_type);
             self.sessions.insert(session_key.clone(), session);
+            info!("Create session: {:?}", session_key);
         }
 
         if let Some(session) = self.sessions.get_mut(&session_key) {
@@ -224,17 +220,45 @@ impl SessionManager {
 pub struct Session {
     ctx: SessionCtx,
     conf: Config,
+    packets: Vec<MySQLPacket>,
+    seq: u8,
 }
 
 impl Session {
     pub fn new(conf: Config, ctx: SessionCtx) -> Session {
-        Session { ctx, conf }
+        Session { ctx, conf, packets: vec![], seq: 0 }
     }
 
     pub fn accept(&mut self, pkt: SessionPacket) {
-        info!("Accept packet: {:?}", pkt);
+        info!("session.accept: {:?}", pkt);
+        let my_pkt = MySQLPacket::new(&pkt.tcp_layer.payload);
+        if my_pkt.is_none() {
+            return;
+        }
+        let my_pkt = my_pkt.unwrap();
+        info!("Got mysql packet: {:?}", my_pkt);
+        if my_pkt.seq < self.seq {
+            self.seq = my_pkt.seq;
+            self.flush();
+        }
+
+        self.packets.push(my_pkt);
+    }
+
+    fn flush(&mut self) {
+        if self.packets.is_empty() {
+            return;
+        }
+
+        let mut tmp = vec![];
+        swap(&mut tmp, &mut self.packets);
+
+        for pkt in tmp {
+            info!("Flush packet: {:?}", pkt);
+        }
     }
 }
+
 
 #[derive(Debug, Clone)]
 enum SessionState {

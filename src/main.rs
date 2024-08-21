@@ -4,7 +4,7 @@ use std::collections::HashMap;
 fn main() {
     env_logger::init();
     let mut db = HashMap::new();
-    db.insert("3308".to_string(), "mysql".to_string());
+    db.insert("3309".to_string(), "mysql".to_string());
     let conf = Config {
         // storage: &config::STORAGE,
         bpf: "tcp and port 3309".to_string(),
