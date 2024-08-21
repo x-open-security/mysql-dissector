@@ -1,6 +1,6 @@
 use config::Config;
 use log::{debug, error, info, warn};
-use packets::mysql::{MySQLProtocolRequestPacket};
+use packets::mysql::MySQLProtocolPacket;
 use pnet::datalink::Channel::Ethernet;
 use pnet::packet::ethernet::{EtherType, EtherTypes, EthernetPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
@@ -10,6 +10,7 @@ use pnet::packet::tcp::{TcpFlags, TcpOption, TcpPacket};
 use pnet::packet::Packet;
 use std::collections::HashMap;
 use std::error::Error;
+use std::mem::swap;
 use std::ops::Deref;
 
 pub struct Capture {
@@ -22,6 +23,46 @@ impl Capture {
         Capture {
             manager: NetworkManager::new(conf.clone()),
             config: conf.clone(),
+        }
+    }
+
+    fn to_eth_layer(&self, eth_pkt: &EthernetPacket) -> EthLayer {
+        EthLayer {
+            src_mac: eth_pkt.get_source().to_string(),
+            dst_mac: eth_pkt.get_destination().to_string(),
+            eth_type: eth_pkt.get_ethertype(),
+        }
+    }
+
+    fn to_ip_layer(&self, ip_pkt: &Ipv4Packet) -> IpLayer {
+        IpLayer {
+            src_ip: ip_pkt.get_source().to_string(),
+            dst_ip: ip_pkt.get_destination().to_string(),
+        }
+    }
+
+    fn to_tcp_layer(&self, tcp_pkt: &TcpPacket) -> TcpLayer {
+        TcpLayer {
+            src_port: tcp_pkt.get_source(),
+            dst_port: tcp_pkt.get_destination(),
+            flags: tcp_pkt.get_flags(),
+            options: tcp_pkt.get_options().to_vec(),
+            payload: tcp_pkt.payload().to_vec(),
+        }
+    }
+
+    fn db_type(&self, port: u16) -> Option<String> {
+        let db_type = self.config.support_db.iter().find(|(k, v)| {
+            return if port == v.parse().unwrap() {
+                true
+            } else {
+                false
+            };
+        });
+
+        match db_type {
+            Some((k, _)) => Some(k.to_string()),
+            None => None,
         }
     }
 
@@ -51,7 +92,7 @@ impl Capture {
                     let eth_type = eth.get_ethertype();
                     match eth_type {
                         EtherTypes::Ipv4 => {
-                            let ipv4 = Ipv4Packet::new(eth.payload())
+                            let ipv4 = Ipv4Packet::new(&eth.payload())
                                 .unwrap()
                                 .consume_to_immutable();
 
@@ -61,6 +102,7 @@ impl Capture {
                                         .unwrap()
                                         .consume_to_immutable(),
                                 ),
+                                // todo support udp
                                 _ => continue,
                             };
 
@@ -69,12 +111,61 @@ impl Capture {
                                     if (tp.get_flags() & TcpFlags::PSH > 0)
                                         && (tp.get_flags() & TcpFlags::ACK > 0)
                                     {
-                                        self.manager.accept(&mut SessionPacket {
-                                            tcp_pkt: &tp,
-                                            eth_pkt: &eth,
-                                            ip_pkt: &ipv4,
-                                            request: false,
-                                        });
+                                        let eth_layer = self.to_eth_layer(&eth);
+                                        let ip_layer = self.to_ip_layer(&ipv4);
+                                        let tcp_layer = self.to_tcp_layer(&tp);
+                                        let mut request = false;
+                                        let mut sb: String = "".parse().unwrap();
+                                        let mut db_type = self.db_type(tcp_layer.dst_port);
+
+                                        match db_type {
+                                            Some(db) => {
+                                                debug!("Found db type: {:?}", db);
+                                                request = true;
+                                                sb = db;
+                                            }
+                                            None => {
+                                                db_type = self.db_type(tcp_layer.src_port);
+                                                match db_type {
+                                                    Some(db) => {
+                                                        debug!("Found db type: {:?}", db);
+                                                        sb = db
+                                                    }
+                                                    None => {
+                                                        continue;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        let session_key = if request {
+                                            format!(
+                                                "{}:{}:{}:{}",
+                                                ip_layer.src_ip,
+                                                tcp_layer.src_port,
+                                                ip_layer.dst_ip,
+                                                tcp_layer.dst_port
+                                            )
+                                        } else {
+                                            format!(
+                                                "{}:{}:{}:{}",
+                                                ip_layer.dst_ip,
+                                                tcp_layer.dst_port,
+                                                ip_layer.src_ip,
+                                                tcp_layer.src_port
+                                            )
+                                        };
+
+                                        let pkt = SessionPacket {
+                                            eth_layer,
+                                            ip_layer,
+                                            tcp_layer,
+                                            request,
+                                            db: sb,
+                                            session_key,
+                                        };
+
+                                        self.manager.accept(pkt);
                                     }
                                 }
                                 None => continue,
@@ -107,174 +198,96 @@ impl NetworkManager {
         }
     }
 
-    pub fn db_type(&self, port: u16) -> Option<String> {
-        let db_type = self.config.support_db.iter().find(|(k, v)| {
-            return if port == v.parse().unwrap() {
-                true
-            } else {
-                false
-            };
-        });
-
-        match db_type {
-            Some((k, _)) => Some(k.to_string()),
-            None => None,
-        }
-    }
-
-    pub fn gen_session_key(&self, pkt: SessionPacket) -> String {
-        let key = if pkt.request {
-            format!(
-                "{}:{}:{}:{}:{}:{}",
-                pkt.ip_pkt.get_source(),
-                pkt.tcp_pkt.get_source(),
-                pkt.ip_pkt.get_destination(),
-                pkt.tcp_pkt.get_destination(),
-                pkt.eth_pkt.get_source(),
-                pkt.eth_pkt.get_destination()
-            )
+    pub fn accept(&mut self, pkt: SessionPacket) {
+        let session_key = &pkt.session_key.clone();
+        let db_type = &pkt.db.clone();
+        if self.sessions.contains_key(session_key) {
+            let session = self.sessions.get_mut(session_key).unwrap();
+            session.accept(pkt);
         } else {
-            format!(
-                "{}:{}:{}:{}:{}:{}",
-                pkt.ip_pkt.get_destination(),
-                pkt.tcp_pkt.get_destination(),
-                pkt.ip_pkt.get_source(),
-                pkt.tcp_pkt.get_source(),
-                pkt.eth_pkt.get_destination(),
-                pkt.eth_pkt.get_source()
-            )
-        };
-
-        key
-    }
-
-    pub fn accept(&mut self, pkt: &mut SessionPacket) {
-        // find db type && ensure packet request or response
-        let mut request = false;
-        let mut db_type = self.db_type(pkt.tcp_pkt.get_destination());
-
-        match db_type {
-            Some(_) => {
-                request = true;
-            }
-            None => {
-                debug!("No db type found, try to find by source port");
-                db_type = self.db_type(pkt.tcp_pkt.get_source());
-            }
+            let mut session = self.create_session(pkt.clone(), db_type.clone());
+            session.accept(pkt);
+            self.sessions.insert(session_key.clone(), session.clone());
         }
-
-        if db_type.is_none() {
-            return;
-        }
-
-        pkt.request = request;
-        info!("Found db type: {:?}", db_type);
-        // find or create session
-        let session_key = self.gen_session_key(pkt.clone());
-
-        let session = {
-            let session = self.sessions.get(&session_key);
-            match session {
-                Some(s) => {
-                    info!("Found session: {:?}", s);
-                    s.clone()
-                }
-                None => {
-                    let session = self.create_session(pkt.clone(), db_type.unwrap());
-                    self.sessions.insert(session_key.clone(), session.clone());
-                    info!("Create new session: {:?}", session);
-                    session
-                }
-            }
-        };
-
-        session.accept(pkt.clone());
     }
 
     pub fn create_session(&self, pkt: SessionPacket, db_type: String) -> Session {
         let session_ctx = self.create_session_ctx(&pkt, db_type);
         let session = Session::new(self.config.clone(), session_ctx);
-
         session
     }
 
     pub fn create_session_ctx(&self, pkt: &SessionPacket, db_type: String) -> SessionCtx {
-        let session_ctx = || -> SessionCtx {
-            if pkt.request {
-                SessionCtx {
-                    state: SessionState::Unknown,
-                    src_ip: pkt.ip_pkt.get_source().to_string(),
-                    dst_ip: pkt.ip_pkt.get_destination().to_string(),
-                    src_port: pkt.tcp_pkt.get_source(),
-                    dst_port: pkt.tcp_pkt.get_destination(),
-                    src_mac: pkt.eth_pkt.get_source().to_string(),
-                    dst_mac: pkt.eth_pkt.get_destination().to_string(),
-                    db_type,
-                }
-            } else {
-                SessionCtx {
-                    state: SessionState::Unknown,
-                    src_ip: pkt.ip_pkt.get_destination().to_string(),
-                    dst_ip: pkt.ip_pkt.get_source().to_string(),
-                    src_port: pkt.tcp_pkt.get_destination(),
-                    dst_port: pkt.tcp_pkt.get_source(),
-                    src_mac: pkt.eth_pkt.get_destination().to_string(),
-                    dst_mac: pkt.eth_pkt.get_source().to_string(),
-                    db_type,
-                }
-            }
-        }();
-
-        session_ctx
+        SessionCtx {
+            state: SessionState::Unknown,
+            src_ip: pkt.ip_layer.src_ip.clone(),
+            dst_ip: pkt.ip_layer.dst_ip.clone(),
+            src_port: pkt.tcp_layer.src_port.clone(),
+            dst_port: pkt.tcp_layer.dst_port.clone(),
+            src_mac: pkt.eth_layer.src_mac.clone(),
+            dst_mac: pkt.eth_layer.dst_mac.clone(),
+            db_type,
+        }
     }
 }
 
 // impl future for async
 #[derive(Debug, Clone)]
-pub struct Session<'a> {
+pub struct Session {
     ctx: SessionCtx,
     conf: Config,
     current_seq_num: u8,
-    tmp_packets: Vec<SessionPacket<'a>>,
+    tmp_packets: Vec<SessionPacket>,
 }
 
 impl Session {
     pub fn new(conf: Config, ctx: SessionCtx) -> Session {
-        Session { ctx, conf, current_seq_num: 0, tmp_packets: vec![] }
+        match ctx.db_type.as_str() {
+            "mysql" => Session {
+                ctx,
+                conf,
+                current_seq_num: 0,
+                tmp_packets: vec![],
+            },
+            _ => {
+                panic!("Unsupported db type: {:?}", ctx.db_type);
+            }
+        }
     }
 
     pub fn accept(&mut self, pkt: SessionPacket) {
         info!("Accept packet: {:?}", pkt);
         if pkt.request {
-            let proto_pkt = MySQLProtocolRequestPacket::new(pkt.tcp_pkt.payload());
+            let proto_pkt = MySQLProtocolPacket::new(pkt.tcp_layer.payload.as_slice());
             match proto_pkt {
                 Some(p) => {
                     if p.get_seq() < self.current_seq_num {
                         self.flush();
                     } else {
                         self.current_seq_num = p.get_seq();
-                        self.tmp_packets.push(pkt);
+                        self.tmp_packets.push(pkt.clone());
                     }
 
-                    info!("MySQLProtocolPacket: packet header {:?}, packet payload: {:?}", p, p.payload());
+                    info!(
+                        "MySQLProtocolPacket: packet header {:?}, packet payload: {:?}",
+                        p,
+                        p.payload()
+                    );
                 }
                 None => {
                     warn!("Not a MySQLProtocolPacket");
                 }
             }
         } else {
-           debug!("todo")
+            debug!("todo")
         }
     }
 
-    fn flush(&mut self) {
-        let packets = self.tmp_packets.clone();
-        self.tmp_packets.clear();
-
-
+    pub fn flush(&mut self) {
+        let mut packets = vec![];
+        swap(&mut packets, &mut self.tmp_packets);
     }
 }
-
 
 #[derive(Debug, Clone)]
 enum SessionState {
@@ -296,9 +309,31 @@ pub struct SessionCtx {
 }
 
 #[derive(Debug, Clone)]
-pub struct SessionPacket<'a> {
-    pub eth_pkt: &'a EthernetPacket<'a>,
-    pub ip_pkt: &'a Ipv4Packet<'a>,
-    pub tcp_pkt: &'a TcpPacket<'a>,
+pub struct SessionPacket {
+    pub eth_layer: EthLayer,
+    pub ip_layer: IpLayer,
+    pub tcp_layer: TcpLayer,
     pub request: bool,
+    pub db: String,
+    pub session_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EthLayer {
+    pub src_mac: String,
+    pub dst_mac: String,
+    pub eth_type: EtherType,
+}
+#[derive(Debug, Clone)]
+pub struct IpLayer {
+    pub src_ip: String,
+    pub dst_ip: String,
+}
+#[derive(Debug, Clone)]
+pub struct TcpLayer {
+    pub src_port: u16,
+    pub dst_port: u16,
+    pub flags: u8,
+    pub options: Vec<TcpOption>,
+    pub payload: Vec<u8>,
 }

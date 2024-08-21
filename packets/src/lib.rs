@@ -1,5 +1,3 @@
-pub mod mysql;
+use std::error::Error;
 
-trait Decoder {
-    fn decode(&self, data: &[u8]) -> Result<(), String>;
-}
+pub mod mysql;
