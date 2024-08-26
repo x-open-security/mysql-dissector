@@ -3,6 +3,7 @@ use network::Capture;
 use packets::DBPacket;
 use parser::executor::Executor;
 use std::collections::HashMap;
+use log::info;
 use tokio::sync::mpsc;
 fn main() {
     env_logger::init();
@@ -32,12 +33,15 @@ fn main() {
 
     // start async capture
     runtime.spawn(async move {
+        info!("Capture started with config: {:?}", conf_capture.clone());
         let mut capture = Capture::new(conf_capture, tx);
-        capture.active();
+
+        capture.active().await;
     });
 
     // start async pkt parser
     runtime.block_on(async move {
+        info!("Executor started with config: {:?}", conf_executor);
         let mut executor = Executor::new(conf_executor, rx);
         executor.run().await;
     });

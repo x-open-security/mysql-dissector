@@ -27,10 +27,8 @@ impl Capture {
         }
     }
 
-    pub fn active(&mut self) {
+    pub async fn active(&mut self) {
         let conf = &self.config;
-        info!("Capture started with config: {:?}", conf);
-
         let ifaces = pnet::datalink::interfaces();
         let cap_iface = ifaces
             .iter()
@@ -49,7 +47,7 @@ impl Capture {
         loop {
             match rx.next() {
                 Ok(packet) => {
-                    self.session_manager.accept(packet);
+                    self.session_manager.accept(packet).await;
                 }
                 Err(e) => {
                     error!("Error happened: {}", e);
@@ -103,7 +101,7 @@ impl SessionManager {
         self.config.support_db.get(&port.to_string()).cloned()
     }
 
-    pub fn format_pkt_layer(&self, pkt: &[u8]) -> Option<SessionPacket> {
+    pub fn format_pkt_layer(&mut self, pkt: &[u8]) -> Option<SessionPacket> {
         // layer 2
         let eth = EthernetPacket::new(pkt)?.consume_to_immutable();
         let eth_type = eth.get_ethertype();
@@ -126,11 +124,9 @@ impl SessionManager {
         if tcp_packet.is_none() {
             return None;
         }
+
         let tp = tcp_packet?;
 
-        if tp.get_flags() & TcpFlags::PSH <= 0 {
-            return None;
-        }
 
         // format packet
         let eth_layer = self.to_eth_layer(&eth);
@@ -141,9 +137,9 @@ impl SessionManager {
             .support_db
             .contains_key(&tcp_layer.dst_port.to_string())
             || self
-                .config
-                .support_db
-                .contains_key(&tcp_layer.src_port.to_string());
+            .config
+            .support_db
+            .contains_key(&tcp_layer.src_port.to_string());
         // check support db
         let db_type = if request {
             self.db_type(tcp_layer.dst_port)
@@ -168,6 +164,19 @@ impl SessionManager {
             )
         };
 
+
+        if tp.get_flags() & TcpFlags::FIN > 0 || tp.get_flags() & TcpFlags::RST > 0 {
+            if self.sessions.contains_key(&session_key) {
+                self.sessions.remove(&session_key);
+            }
+            return None;
+        }
+
+        if tp.get_flags() & TcpFlags::PSH <= 0 {
+            return None;
+        }
+
+
         Some(SessionPacket {
             eth_layer,
             ip_layer,
@@ -178,7 +187,7 @@ impl SessionManager {
         })
     }
 
-    pub fn accept(&mut self, pkt: &[u8]) {
+    pub async fn accept(&mut self, pkt: &[u8]) {
         let pkt = match self.format_pkt_layer(pkt) {
             Some(pkt) => pkt,
             None => return,
@@ -186,15 +195,15 @@ impl SessionManager {
 
         let session_key = pkt.session_key.clone();
         let db_type = pkt.db.clone();
-        info!("Session key: {:?}, DB: {:?}", session_key, db_type);
+        debug!("Session key: {:?}, DB: {:?}", session_key, db_type);
         if !self.sessions.contains_key(&session_key) {
             let session = self.create_session(pkt.clone(), db_type, self.sender.clone());
             self.sessions.insert(session_key.clone(), session);
-            info!("Create session: {:?}", session_key);
+            debug!("Create session: {:?}", session_key);
         }
 
         if let Some(session) = self.sessions.get_mut(&session_key) {
-            session.accept(pkt);
+            session.accept(pkt).await;
         }
     }
 
@@ -248,18 +257,19 @@ impl Session {
     }
 
     pub async fn accept(&mut self, pkt: SessionPacket) {
-        info!("session.accept: {:?}", pkt);
+        debug!("session.accept: {:?}", pkt);
         let my_pkt = MySQLPacket::new(&pkt.tcp_layer.payload);
         if my_pkt.is_none() {
+            warn!("Not a mysql packet");
             return;
         }
         let my_pkt = my_pkt.unwrap();
         info!("Got mysql packet: {:?}", my_pkt);
-        if my_pkt.seq < self.seq {
-            self.seq = my_pkt.seq;
+        if my_pkt.seq < self.seq || my_pkt.seq == self.seq {
+            info!("Got new flow seq: {}, old seq: {}", my_pkt.seq, self.seq);
             self.flush().await;
         }
-
+        self.seq = my_pkt.seq;
         self.packets.push(Box::new(my_pkt));
     }
 
@@ -270,6 +280,7 @@ impl Session {
 
         let mut tmp = vec![];
         swap(&mut tmp, &mut self.packets);
+        info!("Flush packets: {:?}", tmp);
         match self.sender.send(tmp).await {
             Ok(_) => {
                 info!("Send packets to sender");
