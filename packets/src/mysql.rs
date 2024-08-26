@@ -1,4 +1,7 @@
-use crate::Command;
+mod handshake;
+
+use std::any::Any;
+use crate::{Command, DBPacket};
 use crate::DBType;
 use pnet_macros_support::packet::Packet;
 
@@ -47,5 +50,31 @@ impl MySQLPacket {
             cmd,
             payload: payload[5..].to_vec(),
         })
+    }
+}
+
+impl DBPacket for MySQLPacket {
+    fn db_type(&self) -> DBType {
+        DBType::MySQL
+    }
+
+    fn get_command(&self) -> Command {
+        self.cmd.clone()
+    }
+
+    fn get_payload(&self) -> Vec<u8> {
+        self.payload.clone()
+    }
+
+    fn get_seq(&self) -> u8 {
+        self.seq
+    }
+
+    fn get_len(&self) -> u32 {
+        self.len
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

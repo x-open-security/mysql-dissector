@@ -1,4 +1,4 @@
-workspace = { members = [ "config", "metrics", "network", "packets"] }
+workspace = { members = [ "config", "metrics", "network", "packets", "parser"] }
 
 [package]
 name = "rshark"
@@ -10,5 +10,7 @@ network = { path = "network" }
 config = { path = "config" }
 packets = { path = "packets" }
 metrics = { path = "metrics" }
+parser = { path = "parser" }
 env_logger = "0.11.5"
 log = "0.4.22"
+tokio = { version = "1.39.3", features = ["full"] }

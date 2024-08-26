@@ -1,5 +1,7 @@
 use config::Config;
 use log::{debug, error, info, warn};
+use packets::mysql::MySQLPacket;
+use packets::DBPacket;
 use pnet::datalink::Channel::Ethernet;
 use pnet::packet::ethernet::{EtherType, EtherTypes, EthernetPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
@@ -10,8 +12,7 @@ use pnet::packet::Packet;
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem::swap;
-use std::ops::Deref;
-use packets::mysql::MySQLPacket;
+use tokio::sync::mpsc;
 
 pub struct Capture {
     session_manager: SessionManager,
@@ -19,9 +20,9 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub fn new(conf: Config) -> Capture {
+    pub fn new(conf: Config, sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>) -> Capture {
         Capture {
-            session_manager: SessionManager::new(conf.clone()),
+            session_manager: SessionManager::new(conf.clone(), sender),
             config: conf.clone(),
         }
     }
@@ -61,13 +62,15 @@ impl Capture {
 pub struct SessionManager {
     sessions: HashMap<String, Session>,
     config: Config,
+    sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
 }
 
 impl SessionManager {
-    pub fn new(conf: Config) -> SessionManager {
+    pub fn new(conf: Config, sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>) -> SessionManager {
         SessionManager {
             sessions: Default::default(),
             config: conf,
+            sender,
         }
     }
 
@@ -185,7 +188,7 @@ impl SessionManager {
         let db_type = pkt.db.clone();
         info!("Session key: {:?}, DB: {:?}", session_key, db_type);
         if !self.sessions.contains_key(&session_key) {
-            let session = self.create_session(pkt.clone(), db_type);
+            let session = self.create_session(pkt.clone(), db_type, self.sender.clone());
             self.sessions.insert(session_key.clone(), session);
             info!("Create session: {:?}", session_key);
         }
@@ -195,9 +198,14 @@ impl SessionManager {
         }
     }
 
-    pub fn create_session(&self, pkt: SessionPacket, db_type: String) -> Session {
+    pub fn create_session(
+        &self,
+        pkt: SessionPacket,
+        db_type: String,
+        sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
+    ) -> Session {
         let session_ctx = self.create_session_ctx(&pkt, db_type);
-        let session = Session::new(self.config.clone(), session_ctx);
+        let session = Session::new(self.config.clone(), session_ctx, sender);
         session
     }
 
@@ -216,20 +224,30 @@ impl SessionManager {
 }
 
 // impl future for async
-#[derive(Debug, Clone)]
 pub struct Session {
     ctx: SessionCtx,
     conf: Config,
-    packets: Vec<MySQLPacket>,
+    packets: Vec<Box<dyn DBPacket>>,
     seq: u8,
+    sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
 }
 
 impl Session {
-    pub fn new(conf: Config, ctx: SessionCtx) -> Session {
-        Session { ctx, conf, packets: vec![], seq: 0 }
+    pub fn new(
+        conf: Config,
+        ctx: SessionCtx,
+        sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
+    ) -> Session {
+        Session {
+            ctx,
+            conf,
+            packets: vec![],
+            seq: 0,
+            sender,
+        }
     }
 
-    pub fn accept(&mut self, pkt: SessionPacket) {
+    pub async fn accept(&mut self, pkt: SessionPacket) {
         info!("session.accept: {:?}", pkt);
         let my_pkt = MySQLPacket::new(&pkt.tcp_layer.payload);
         if my_pkt.is_none() {
@@ -239,26 +257,29 @@ impl Session {
         info!("Got mysql packet: {:?}", my_pkt);
         if my_pkt.seq < self.seq {
             self.seq = my_pkt.seq;
-            self.flush();
+            self.flush().await;
         }
 
-        self.packets.push(my_pkt);
+        self.packets.push(Box::new(my_pkt));
     }
 
-    fn flush(&mut self) {
+    async fn flush(&mut self) {
         if self.packets.is_empty() {
             return;
         }
 
         let mut tmp = vec![];
         swap(&mut tmp, &mut self.packets);
-
-        for pkt in tmp {
-            info!("Flush packet: {:?}", pkt);
+        match self.sender.send(tmp).await {
+            Ok(_) => {
+                info!("Send packets to sender");
+            }
+            Err(e) => {
+                error!("Error happened: {}", e);
+            }
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 enum SessionState {
