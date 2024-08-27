@@ -1,3 +1,5 @@
+pub mod server;
+
 use crate::DBType;
 use crate::{Command, DBPacket};
 use pnet_macros_support::packet::Packet;
