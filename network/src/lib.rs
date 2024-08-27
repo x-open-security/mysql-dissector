@@ -237,17 +237,13 @@ pub struct Session {
     sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>,
 }
 
-impl Session {
-    fn from(value: Session) -> Self {
-        Self {
-            ctx: value.ctx,
-            conf: value.conf,
-            packets: value.packets,
-            seq: value.seq,
-            sender: value.sender,
-        }
+impl Drop for Session {
+    fn drop(&mut self) {
+        info!("Session droped: {:?}", self.ctx);
     }
+}
 
+impl Session {
     pub fn new(
         conf: Config,
         ctx: SessionCtx,
@@ -263,7 +259,6 @@ impl Session {
     }
 
     pub async fn accept(&mut self, pkt: SessionPacket) {
-        debug!("session.accept: {:?}", pkt);
         if pkt.request {
             let my_pkt = MySQLPacketRequest::new(&pkt.tcp_layer.payload);
             if my_pkt.is_none() {
@@ -299,7 +294,8 @@ impl Session {
         let mut tmp = vec![];
         swap(&mut tmp, &mut self.packets);
         if self.sender.is_closed() {
-
+            error!("Sender is closed, drop packets len: {:?}", tmp.len());
+            return;
         }
         match self.sender.send(tmp) {
             Ok(_) => {
@@ -311,6 +307,8 @@ impl Session {
         }
     }
 }
+
+
 
 #[derive(Debug, Clone)]
 enum SessionState {

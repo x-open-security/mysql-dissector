@@ -76,6 +76,10 @@ impl DBPacket for MySQLPacketRequest {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn is_request(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -127,5 +131,8 @@ impl DBPacket for MySQLPacketResponse {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn is_request(&self) -> bool {
+        false
     }
 }

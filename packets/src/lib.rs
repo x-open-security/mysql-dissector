@@ -26,13 +26,14 @@ impl PrimitiveValues for DBType {
 
 
 // mark send packet
-pub trait DBPacket: Send + Sync + CloneBoxDBPacket{
+pub trait DBPacket: Send + Sync + CloneBoxDBPacket {
     fn db_type(&self) -> DBType;
     fn get_command(&self) -> Command;
     fn get_payload(&self) -> Vec<u8>;
     fn get_seq(&self) -> u8;
     fn get_len(&self) -> u32;
     fn as_any(&self) -> &dyn Any;
+    fn is_request(&self) -> bool;
 }
 
 pub trait CloneBoxDBPacket {
