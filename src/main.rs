@@ -18,7 +18,7 @@ fn main() {
         support_db: db,
     };
 
-    let (tx, rx) = mpsc::channel::<Vec<Box<dyn DBPacket>>>(32);
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<Box<dyn DBPacket>>>();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
         .enable_all()

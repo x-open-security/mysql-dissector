@@ -1,6 +1,6 @@
 use config::Config;
 use log::{debug, error, info, warn};
-use packets::mysql::MySQLPacket;
+use packets::mysql::{MySQLPacketRequest, MySQLPacketResponse};
 use packets::DBPacket;
 use pnet::datalink::Channel::Ethernet;
 use pnet::packet::ethernet::{EtherType, EtherTypes, EthernetPacket};
@@ -12,6 +12,7 @@ use pnet::packet::Packet;
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem::swap;
+use std::ops::Deref;
 use tokio::sync::mpsc;
 
 pub struct Capture {
@@ -20,7 +21,7 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub fn new(conf: Config, sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>) -> Capture {
+    pub fn new(conf: Config, sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>) -> Capture {
         Capture {
             session_manager: SessionManager::new(conf.clone(), sender),
             config: conf.clone(),
@@ -60,11 +61,14 @@ impl Capture {
 pub struct SessionManager {
     sessions: HashMap<String, Session>,
     config: Config,
-    sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
+    sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>,
 }
 
 impl SessionManager {
-    pub fn new(conf: Config, sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>) -> SessionManager {
+    pub fn new(
+        conf: Config,
+        sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>,
+    ) -> SessionManager {
         SessionManager {
             sessions: Default::default(),
             config: conf,
@@ -127,19 +131,16 @@ impl SessionManager {
 
         let tp = tcp_packet?;
 
-
         // format packet
         let eth_layer = self.to_eth_layer(&eth);
         let ip_layer = self.to_ip_layer(&ipv4);
         let tcp_layer = self.to_tcp_layer(&tp);
-        let mut request = self
+        let request = self
             .config
             .support_db
-            .contains_key(&tcp_layer.dst_port.to_string())
-            || self
-            .config
-            .support_db
-            .contains_key(&tcp_layer.src_port.to_string());
+            .iter()
+            .any(|(port, _)| *port == tcp_layer.dst_port.to_string());
+
         // check support db
         let db_type = if request {
             self.db_type(tcp_layer.dst_port)
@@ -164,18 +165,17 @@ impl SessionManager {
             )
         };
 
-
         if tp.get_flags() & TcpFlags::FIN > 0 || tp.get_flags() & TcpFlags::RST > 0 {
+            info!("Session closed: {:?}", session_key);
             if self.sessions.contains_key(&session_key) {
                 self.sessions.remove(&session_key);
             }
             return None;
         }
 
-        if tp.get_flags() & TcpFlags::PSH <= 0 {
+        if tp.get_flags() & TcpFlags::PSH <= 0 && tp.get_flags() & TcpFlags::ACK <= 0 {
             return None;
         }
-
 
         Some(SessionPacket {
             eth_layer,
@@ -195,27 +195,22 @@ impl SessionManager {
 
         let session_key = pkt.session_key.clone();
         let db_type = pkt.db.clone();
-        debug!("Session key: {:?}, DB: {:?}", session_key, db_type);
-        if !self.sessions.contains_key(&session_key) {
-            let session = self.create_session(pkt.clone(), db_type, self.sender.clone());
-            self.sessions.insert(session_key.clone(), session);
-            debug!("Create session: {:?}", session_key);
-        }
 
-        if let Some(session) = self.sessions.get_mut(&session_key) {
-            session.accept(pkt).await;
-        }
-    }
+        // check session
+        let mut session = self.sessions.get_mut(&session_key);
 
-    pub fn create_session(
-        &self,
-        pkt: SessionPacket,
-        db_type: String,
-        sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
-    ) -> Session {
-        let session_ctx = self.create_session_ctx(&pkt, db_type);
-        let session = Session::new(self.config.clone(), session_ctx, sender);
-        session
+        match session {
+            Some(sess) => {
+                sess.accept(pkt).await;
+            }
+            None => {
+                let conf = self.config.clone();
+                let sender = self.sender.clone();
+                let session_ctx = self.create_session_ctx(&pkt, db_type);
+                let new_sess = Session::new(conf, session_ctx, sender);
+                self.sessions.insert(session_key.clone(), new_sess.clone());
+            }
+        }
     }
 
     pub fn create_session_ctx(&self, pkt: &SessionPacket, db_type: String) -> SessionCtx {
@@ -233,19 +228,30 @@ impl SessionManager {
 }
 
 // impl future for async
+#[derive(Clone)]
 pub struct Session {
     ctx: SessionCtx,
     conf: Config,
     packets: Vec<Box<dyn DBPacket>>,
     seq: u8,
-    sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
+    sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>,
 }
 
 impl Session {
+    fn from(value: Session) -> Self {
+        Self {
+            ctx: value.ctx,
+            conf: value.conf,
+            packets: value.packets,
+            seq: value.seq,
+            sender: value.sender,
+        }
+    }
+
     pub fn new(
         conf: Config,
         ctx: SessionCtx,
-        sender: mpsc::Sender<Vec<Box<dyn DBPacket>>>,
+        sender: mpsc::UnboundedSender<Vec<Box<dyn DBPacket>>>,
     ) -> Session {
         Session {
             ctx,
@@ -258,19 +264,31 @@ impl Session {
 
     pub async fn accept(&mut self, pkt: SessionPacket) {
         debug!("session.accept: {:?}", pkt);
-        let my_pkt = MySQLPacket::new(&pkt.tcp_layer.payload);
-        if my_pkt.is_none() {
-            warn!("Not a mysql packet");
-            return;
+        if pkt.request {
+            let my_pkt = MySQLPacketRequest::new(&pkt.tcp_layer.payload);
+            if my_pkt.is_none() {
+                warn!("Not a mysql request packet");
+                return;
+            }
+            let my_pkt = my_pkt.unwrap();
+            info!("Got mysql request packet: {:?}", my_pkt);
+            if my_pkt.seq < self.seq {
+                info!("Got new flow seq: {}, old seq: {}", my_pkt.seq, self.seq);
+                self.flush().await;
+            }
+            self.seq = my_pkt.seq;
+            self.packets.push(Box::new(my_pkt));
+        } else {
+            let my_pkt = MySQLPacketResponse::new(&pkt.tcp_layer.payload);
+            if my_pkt.is_none() {
+                warn!("Not a mysql resp packet");
+                return;
+            }
+            let my_pkt = my_pkt.unwrap();
+            info!("Got mysql response packet: {:?}", my_pkt);
+            self.seq = my_pkt.first_pkt_seq;
+            self.packets.push(Box::new(my_pkt));
         }
-        let my_pkt = my_pkt.unwrap();
-        info!("Got mysql packet: {:?}", my_pkt);
-        if my_pkt.seq < self.seq || my_pkt.seq == self.seq {
-            info!("Got new flow seq: {}, old seq: {}", my_pkt.seq, self.seq);
-            self.flush().await;
-        }
-        self.seq = my_pkt.seq;
-        self.packets.push(Box::new(my_pkt));
     }
 
     async fn flush(&mut self) {
@@ -280,8 +298,10 @@ impl Session {
 
         let mut tmp = vec![];
         swap(&mut tmp, &mut self.packets);
-        info!("Flush packets: {:?}", tmp);
-        match self.sender.send(tmp).await {
+        if self.sender.is_closed() {
+
+        }
+        match self.sender.send(tmp) {
             Ok(_) => {
                 info!("Send packets to sender");
             }

@@ -26,7 +26,7 @@ impl PrimitiveValues for DBType {
 
 
 // mark send packet
-pub trait DBPacket: Send {
+pub trait DBPacket: Send + Sync + CloneBoxDBPacket{
     fn db_type(&self) -> DBType;
     fn get_command(&self) -> Command;
     fn get_payload(&self) -> Vec<u8>;
@@ -35,8 +35,21 @@ pub trait DBPacket: Send {
     fn as_any(&self) -> &dyn Any;
 }
 
-impl std::fmt::Debug for dyn DBPacket {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DBPacket")
+pub trait CloneBoxDBPacket {
+    fn clone_box(&self) -> Box<dyn DBPacket>;
+}
+
+impl<T> CloneBoxDBPacket for T
+where
+    T: 'static + DBPacket + Clone,
+{
+    fn clone_box(&self) -> Box<dyn DBPacket> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn DBPacket> {
+    fn clone(&self) -> Box<dyn DBPacket> {
+        self.clone_box()
     }
 }
