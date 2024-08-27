@@ -1,4 +1,4 @@
-pub struct Handshake {
+pub struct Login {
     pub protocol_version: u8,
     pub server_version: String,
     pub connection_id: u32,
@@ -10,4 +10,3 @@ pub struct Handshake {
     pub username: Option<String>,
     pub database: Option<String>,
 }
-

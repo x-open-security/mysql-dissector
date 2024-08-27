@@ -1,5 +1,3 @@
-mod handshake;
-
 use crate::DBType;
 use crate::{Command, DBPacket};
 use pnet_macros_support::packet::Packet;
@@ -135,4 +133,19 @@ impl DBPacket for MySQLPacketResponse {
     fn is_request(&self) -> bool {
         false
     }
+}
+
+
+pub struct MySQLParser {
+
+}
+
+impl MySQLParser {
+    pub fn new() -> MySQLParser {
+        MySQLParser {}
+    }
+
+    // pub async fn parse(&self, ) -> Option<Box<dyn DBPacket>> {
+    //
+    // }
 }

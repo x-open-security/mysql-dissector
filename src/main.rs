@@ -1,7 +1,10 @@
+mod packet_capture;
+pub mod packet_consumer;
+
 use config::Config;
-use network::Capture;
+use packet_capture::Capture;
 use packets::DBPacket;
-use parser::executor::Executor;
+use packet_consumer::Consumer;
 use std::collections::HashMap;
 use log::info;
 use tokio::sync::mpsc;
@@ -18,31 +21,29 @@ fn main() {
         support_db: db,
     };
 
-    let (tx, rx) = mpsc::unbounded_channel::<Vec<Box<dyn DBPacket>>>();
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
         .enable_all()
         .build()
         .unwrap();
 
-
-
-    // Clone conf for capture and executor
     let conf_capture = conf.clone();
-    let conf_executor = conf.clone();
-
-    // start async capture
-    runtime.spawn(async move {
+    runtime.spawn(async {
         info!("Capture started with config: {:?}", conf_capture.clone());
         let mut capture = Capture::new(conf_capture, tx);
-
         capture.active().await;
     });
 
-    // start async pkt parser
-    runtime.block_on(async move {
+
+    let conf_executor = conf.clone();
+    runtime.block_on(async {
         info!("Executor started with config: {:?}", conf_executor);
-        let mut executor = Executor::new(conf_executor, rx);
-        executor.run().await;
+        let mut consumer = Consumer::new(conf_executor, &runtime, rx,);
+        consumer.run().await;
     });
 }
+
+
+

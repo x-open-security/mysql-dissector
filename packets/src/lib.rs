@@ -13,6 +13,26 @@ pub enum DBType {
     Unknown,
 }
 
+impl std::fmt::Display for DBType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DBType::MySQL => write!(f, "MySQL"),
+            DBType::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+impl std::str::FromStr for DBType {
+    type Err = Box<dyn Error>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "MySQL" => Ok(DBType::MySQL),
+            "Unknown" => Ok(DBType::Unknown),
+            _ => Err("Invalid DBType".into()),
+        }
+    }
+}
+
 
 impl PrimitiveValues for DBType {
     type T = (u8,);
