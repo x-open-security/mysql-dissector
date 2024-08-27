@@ -12,4 +12,5 @@ log = "0.4.22"
 pnet_macros_support = "0.35.0"
 pnet_macros = "0.35.0"
 pnet_packet = "0.35.0"
+bytes = "1.6.0"
 
