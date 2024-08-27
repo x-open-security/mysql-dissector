@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::io::Cursor;
 use bytes::Buf;
-
+use log::error;
 
 #[derive(Debug)]
 pub struct Greeting {
@@ -51,7 +51,12 @@ impl Greeting {
         let mut unused = [0; 10];
         for i in 0..10 {
             unused[i] = reader.get_u8();
+            if unused[i] != 0 {
+                error!("mysql server greeting unused field is not 0");
+                return None;
+            }
         }
+
 
         let mut auth_plugin_data_2 = Vec::new();
         while let c = reader.get_u8() {
