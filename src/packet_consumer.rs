@@ -1,9 +1,9 @@
 use config::Config;
 use log::{error, info, warn};
-use tokio::runtime::Runtime;
 use network::session_manager::SessionManager;
 use network::SessionPacket;
 use packets::DBPacket;
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 pub struct Consumer {
@@ -13,7 +13,11 @@ pub struct Consumer {
 }
 
 impl Consumer {
-    pub fn new(conf: Config, runtime: &Runtime, raw_pkt_rx: mpsc::UnboundedReceiver<Vec<u8>>) -> Consumer {
+    pub fn new(
+        conf: Config,
+        runtime: &Runtime,
+        raw_pkt_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    ) -> Consumer {
         let (db_pkt_tx, db_pkt_rx) = mpsc::unbounded_channel::<SessionPacket>();
         let mut sm = SessionManager::new(conf.clone(), db_pkt_rx);
         if !sm.is_running() {
@@ -49,7 +53,7 @@ impl Consumer {
                             }
                         }
                         None => {
-                           // nothing to do
+                            // nothing to do
                         }
                     };
                 }

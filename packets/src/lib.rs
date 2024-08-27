@@ -1,6 +1,6 @@
 use pnet_macros_support::packet::PrimitiveValues;
-use std::error::Error;
 use std::any::Any;
+use std::error::Error;
 
 pub mod mysql;
 #[derive(Debug, Clone)]
@@ -32,7 +32,6 @@ impl std::str::FromStr for DBType {
     }
 }
 
-
 impl PrimitiveValues for DBType {
     type T = (u8,);
     fn to_primitive_values(&self) -> (u8,) {
@@ -42,7 +41,6 @@ impl PrimitiveValues for DBType {
         }
     }
 }
-
 
 // mark send packet
 pub trait DBPacket: Send + Sync + CloneBoxDBPacket {

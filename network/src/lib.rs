@@ -1,17 +1,17 @@
-pub mod session_manager;
 mod session;
+pub mod session_manager;
 
 use log::{debug, error, info};
+use packets::DBType;
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::tcp::TcpOption;
 use pnet::packet::Packet;
 use pnet_packet::ethernet::{EtherType, EtherTypes};
-use std::error::Error;
-use std::str::FromStr;
 use pnet_packet::ipv4::Ipv4Packet;
 use pnet_packet::ipv6::Ipv6Packet;
 use pnet_packet::tcp::TcpPacket;
-use packets::DBType;
+use std::error::Error;
+use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 enum SessionState {
@@ -160,7 +160,10 @@ impl SessionPacket {
         } else {
             let dt = config.support_db.get(&tcp.get_source().to_string());
             if dt.is_none() {
-                debug!("Failed to get db type port {:?}", &tcp.get_source().to_string());
+                debug!(
+                    "Failed to get db type port {:?}",
+                    &tcp.get_source().to_string()
+                );
                 return None;
             } else {
                 (
@@ -173,7 +176,7 @@ impl SessionPacket {
                         eth_layer.src_mac,
                         ip_layer.src_ip,
                         tcp_layer.src_port
-                    )
+                    ),
                 )
             }
         };

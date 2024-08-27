@@ -2,11 +2,11 @@ mod packet_capture;
 pub mod packet_consumer;
 
 use config::Config;
-use packet_capture::Capture;
-use packets::DBPacket;
-use packet_consumer::Consumer;
-use std::collections::HashMap;
 use log::info;
+use packet_capture::Capture;
+use packet_consumer::Consumer;
+use packets::DBPacket;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 fn main() {
     env_logger::init();
@@ -36,14 +36,10 @@ fn main() {
         capture.active().await;
     });
 
-
     let conf_executor = conf.clone();
     runtime.block_on(async {
         info!("Executor started with config: {:?}", conf_executor);
-        let mut consumer = Consumer::new(conf_executor, &runtime, rx,);
+        let mut consumer = Consumer::new(conf_executor, &runtime, rx);
         consumer.run().await;
     });
 }
-
-
-

@@ -1,5 +1,5 @@
-use log::info;
 use crate::{SessionCtx, SessionPacket};
+use log::info;
 use packets::mysql::{MySQLPacketRequest, MySQLPacketResponse};
 use packets::{DBPacket, DBType};
 
@@ -34,7 +34,6 @@ impl Session {
 
                     self.pkt_seq = req_pkt.get_seq();
                     self.flow_packets.push(Box::new(req_pkt));
-
                 } else {
                     let resp_pkt = match MySQLPacketResponse::new(&pkt.tcp_layer.payload) {
                         Some(pkt) => pkt,
@@ -48,7 +47,6 @@ impl Session {
                     }
 
                     self.flow_packets.push(Box::new(resp_pkt));
-
                 }
             }
             _ => {}

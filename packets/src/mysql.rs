@@ -137,10 +137,7 @@ impl DBPacket for MySQLPacketResponse {
     }
 }
 
-
-pub struct MySQLParser {
-
-}
+pub struct MySQLParser {}
 
 impl MySQLParser {
     pub fn new() -> MySQLParser {
