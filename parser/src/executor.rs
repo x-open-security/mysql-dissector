@@ -1,8 +1,8 @@
 use config::Config;
-use tokio::sync::mpsc;
 use log::info;
-use packets::{DBPacket, DBType};
 use packets::mysql::{MySQLPacketRequest, MySQLPacketResponse};
+use packets::{DBPacket, DBType};
+use tokio::sync::mpsc;
 
 pub struct Executor {
     pub config: Config,
@@ -11,7 +11,7 @@ pub struct Executor {
 
 impl Executor {
     pub fn new(conf: Config, rx: mpsc::UnboundedReceiver<Vec<Box<dyn DBPacket>>>) -> Executor {
-        Executor { config: conf , rx}
+        Executor { config: conf, rx }
     }
     pub async fn run(&mut self) {
         loop {
@@ -27,16 +27,22 @@ impl Executor {
                                 // do something
                                 // packets -> mysql
                                 if pkt.is_request() {
-                                    let mysql_pkt = pkt.as_any().downcast_ref::<MySQLPacketRequest>().unwrap();
-                                    info!("rx: MySQL Packet, index: {:?}, pkt:{:?}", index, mysql_pkt);
+                                    let mysql_pkt =
+                                        pkt.as_any().downcast_ref::<MySQLPacketRequest>().unwrap();
+                                    info!(
+                                        "rx: MySQL Packet, index: {:?}, pkt:{:?}",
+                                        index, mysql_pkt
+                                    );
                                 } else {
-                                    let mysql_pkt = pkt.as_any().downcast_ref::<MySQLPacketResponse>().unwrap();
-                                    info!("rx: MySQL Packet, index: {:?}, pkt:{:?}", index, mysql_pkt);
+                                    let mysql_pkt =
+                                        pkt.as_any().downcast_ref::<MySQLPacketResponse>().unwrap();
+                                    info!(
+                                        "rx: MySQL Packet, index: {:?}, pkt:{:?}",
+                                        index, mysql_pkt
+                                    );
                                 }
                             }
-                            DBType::Unknown => {
-
-                            }
+                            _ => {}
                         }
                     }
                 }
