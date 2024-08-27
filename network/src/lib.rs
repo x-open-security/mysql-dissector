@@ -15,6 +15,8 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 enum SessionState {
+    ServerGreeting,
+    ClientHandshakeResponse,
     Login,
     Logout,
     Unknown,
@@ -30,7 +32,63 @@ pub struct SessionCtx {
     pub src_mac: String,
     pub dst_mac: String,
     pub db_type: String,
+
+    // parse mysql greeting packet
+    pub server_cap: u32,
+    pub client_cap: u32,
+    pub server_status: u16,
+    pub client_status: u16,
+    pub server_language: u8,
+    pub client_language: u8,
+    pub server_version: String,
+    pub client_version: String,
 }
+
+impl SessionCtx {
+    pub fn set_state(&mut self, state: SessionState) {
+        self.state = state;
+    }
+    pub fn set_server_version(&mut self, version: String) {
+        self.server_version = version;
+    }
+
+    pub fn set_server_language(&mut self, language: u8) {
+        self.server_language = language;
+    }
+
+    pub fn set_connection_id(&mut self, id: u32) {
+        self.server_cap = id;
+    }
+
+    pub fn set_capability_flags(&mut self, flags: u32) {
+        self.server_cap = flags;
+    }
+
+    pub fn set_status_flags(&mut self, flags: u16) {
+        self.server_status = flags;
+    }
+
+    pub fn set_extended_capability_flags(&mut self, flags: u16) {
+        self.client_status = flags;
+    }
+
+    pub fn set_auth_plugin_len(&mut self, len: u8) {
+        self.server_language = len;
+    }
+
+    pub fn set_auth_plugin_data(&mut self, data: Vec<u8>) {
+        self.server_language = data.len() as u8;
+    }
+
+    pub fn set_auth_plugin_data_2(&mut self, data: Vec<u8>) {
+        self.server_language = data.len() as u8;
+    }
+
+    pub fn set_auth_plugin_name(&mut self, name: String) {
+        self.server_version = name;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EthLayer {
     pub src_mac: String,
