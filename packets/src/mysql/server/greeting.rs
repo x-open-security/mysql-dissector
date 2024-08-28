@@ -26,7 +26,8 @@ impl Greeting {
         let protocol_version = reader.get_u8();
 
         let mut server_version = String::new();
-        while let c = reader.get_u8() {
+        loop {
+            let c = reader.get_u8();
             if c == 0 {
                 break;
             }
@@ -58,7 +59,8 @@ impl Greeting {
         }
 
         let mut auth_plugin_data_2 = Vec::new();
-        while let c = reader.get_u8() {
+        loop {
+            let c = reader.get_u8();
             if c == 0 {
                 break;
             }
@@ -66,7 +68,8 @@ impl Greeting {
         }
 
         let mut auth_plugin_name = String::new();
-        while let c = reader.get_u8() {
+        loop {
+            let c = reader.get_u8();
             if c == 0 {
                 break;
             }
@@ -93,7 +96,7 @@ impl Greeting {
 #[cfg(test)]
 mod test {
     #[test]
-    pub fn test_greeting() {
+    pub fn test_mysql57_greeting() {
         use super::Greeting;
         use std::io::Cursor;
 

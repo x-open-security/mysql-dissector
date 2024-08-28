@@ -1,7 +1,45 @@
+mod client;
 pub mod server;
+
 pub mod common {
-    use std::any::Any;
     use crate::{Command, DBPacket, DBType};
+    use std::any::Any;
+
+    // cap
+    pub const CLIENT_LONG_PASSWORD: u32 = 1;
+    pub const CLIENT_FOUND_ROWS: u32 = 2;
+    pub const CLIENT_LONG_FLAG: u32 = 4;
+    pub const CLIENT_CONNECT_WITH_DB: u32 = 8;
+    pub const CLIENT_NO_SCHEMA: u32 = 16;
+    pub const CLIENT_COMPRESS: u32 = 32;
+    pub const CLIENT_ODBC: u32 = 64;
+    pub const CLIENT_LOCAL_FILES: u32 = 128;
+    pub const CLIENT_IGNORE_SPACE: u32 = 256;
+    pub const CLIENT_PROTOCOL_41: u32 = 512;
+    pub const CLIENT_INTERACTIVE: u32 = 1024;
+    pub const CLIENT_SSL: u32 = 2048;
+    pub const CLIENT_IGNORE_SIGPIPE: u32 = 4096;
+    pub const CLIENT_TRANSACTIONS: u32 = 8192;
+    pub const CLIENT_RESERVED: u32 = 16384;
+    pub const CLIENT_RESERVED2: u32 = 32768;
+    pub const CLIENT_MULTI_STATEMENTS: u32 = 1 << 16;
+    pub const CLIENT_MULTI_RESULTS: u32 = 1 << 17;
+    pub const CLIENT_PS_MULTI_RESULTS: u32 = 1 << 18;
+    pub const CLIENT_PLUGIN_AUTH: u32 = 1 << 19;
+    pub const CLIENT_CONNECT_ATTRS: u32 = 1 << 20;
+    pub const CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA: u32 = 1 << 21;
+    pub const CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS: u32 = 1 << 22;
+    pub const CLIENT_SESSION_TRACK: u32 = 1 << 23;
+    pub const CLIENT_DEPRECATE_EOF: u32 = 1 << 24;
+    pub const CLIENT_OPTIONAL_RESULTSET_METADATA: u32 = 1 << 25;
+    pub const CLIENT_ZSTD_COMPRESSION_ALGORITHM: u32 = 1 << 26;
+    pub const CLIENT_QUERY_ATTRIBUTES: u32 = 1 << 27;
+    pub const MULTI_FACTOR_AUTHENTICATION: u32 = 1 << 28;
+    pub const CLIENT_CAPABILITY_EXTENSION: u32 = 1 << 29;
+    pub const CLIENT_SSL_VERIFY_SERVER_CERT: u32 = 1 << 30;
+    pub const CLIENT_REMEMBER_OPTIONS: u32 = 1 << 31;
+
+    // command
     pub const QUIT: Command = Command(0x01);
     pub const INIT_DB: Command = Command(0x02);
     pub const QUERY: Command = Command(0x03);
@@ -141,5 +179,4 @@ pub mod common {
             MySQLParser {}
         }
     }
-
 }

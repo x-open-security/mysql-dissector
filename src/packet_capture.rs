@@ -1,6 +1,6 @@
 use config::Config;
 use log::{debug, error};
-use packets::DBPacket;
+
 use pnet::datalink::Channel::Ethernet;
 use tokio::sync::mpsc;
 pub struct Capture {

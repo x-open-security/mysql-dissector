@@ -5,7 +5,7 @@ use config::Config;
 use log::info;
 use packet_capture::Capture;
 use packet_consumer::Consumer;
-use packets::DBPacket;
+
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 fn main() {
