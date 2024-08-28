@@ -2,7 +2,8 @@ use std::cmp::PartialEq;
 use std::os::macos;
 use crate::{SessionCtx, SessionPacket, SessionState};
 use log::info;
-use packets::mysql::{server, MySQLPacketRequest, MySQLPacketResponse};
+use packets::mysql::server;
+use packets::mysql::common::{MySQLPacketRequest, MySQLPacketResponse};
 use packets::{DBPacket, DBType};
 
 pub struct Session {
@@ -34,6 +35,13 @@ impl PartialEq for SessionState {
                     return true;
                 }
             }
+
+            SessionState::ClientHandshakeResponse => {
+                if let SessionState::ClientHandshakeResponse = other {
+                    return true;
+                }
+            },
+
         }
         false
     }
@@ -80,6 +88,7 @@ impl Session {
                         info!("got server hello packet");
                         match server::greeting::Greeting::new(resp_pkt.get_payload()) {
                             Some(greeting) => {
+                                info!("server greeting: {:?}", &greeting);
                                 self.session_ctx.set_state(SessionState::ServerGreeting);
                                 self.session_ctx.set_server_version(greeting.server_version);
                                 self.session_ctx.set_server_language(greeting.server_language);
@@ -91,7 +100,7 @@ impl Session {
                                 self.session_ctx.set_auth_plugin_data(greeting.auth_plugin_data);
                                 self.session_ctx.set_auth_plugin_data_2(greeting.auth_plugin_data_2);
                                 self.session_ctx.set_auth_plugin_name(greeting.auth_plugin_name);
-                                info!("server greeting: {:?}", greeting);
+
                             }
                             None => {
                                 info!("failed to parse server greeting");

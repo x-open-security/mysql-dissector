@@ -49,8 +49,8 @@ impl SessionManager {
         self.sessions.contains_key(session_key)
     }
 
-    fn get_session(&self, session_key: &str) -> Option<&Session> {
-        self.sessions.get(session_key)
+    fn get_session(&mut self, session_key: &str) -> Option<&mut Session> {
+        self.sessions.get_mut(session_key)
     }
 
     fn create_session(&mut self, sess_pkt: SessionPacket) {
@@ -70,6 +70,14 @@ impl SessionManager {
             src_mac: sp.eth_layer.src_mac.clone(),
             dst_mac: sp.eth_layer.dst_mac.clone(),
             db_type: sp.db.to_string(),
+            server_cap: 0,
+            client_cap: 0,
+            server_status: 0,
+            client_status: 0,
+            server_language: 0,
+            client_language: 0,
+            server_version: "".to_string(),
+            client_version: "".to_string(),
         }
     }
 

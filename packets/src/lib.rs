@@ -3,6 +3,7 @@ use std::any::Any;
 use std::error::Error;
 
 pub mod mysql;
+
 #[derive(Debug, Clone)]
 pub struct Command(pub u8);
 
