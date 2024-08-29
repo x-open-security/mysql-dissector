@@ -1,7 +1,7 @@
 use config::Config;
-use log::{error};
-use network::session_manager::SessionManager;
-use network::SessionPacket;
+use log::error;
+use session::SessionManager;
+use session::SessionPacket;
 
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;

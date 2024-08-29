@@ -4,8 +4,14 @@ use std::error::Error;
 
 pub mod mysql;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Command(pub u8);
+
+impl From<u8> for Command {
+    fn from(v: u8) -> Self {
+        Command(v)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum DBType {

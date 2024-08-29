@@ -1,11 +1,13 @@
-mod client;
+pub mod client;
 pub mod server;
 
 pub mod common {
     use crate::{Command, DBPacket, DBType};
+    use bytes::Buf;
     use std::any::Any;
+    use std::io::Cursor;
 
-    // cap
+    // client cap
     pub const CLIENT_LONG_PASSWORD: u32 = 1;
     pub const CLIENT_FOUND_ROWS: u32 = 2;
     pub const CLIENT_LONG_FLAG: u32 = 4;
@@ -38,6 +40,22 @@ pub mod common {
     pub const CLIENT_CAPABILITY_EXTENSION: u32 = 1 << 29;
     pub const CLIENT_SSL_VERIFY_SERVER_CERT: u32 = 1 << 30;
     pub const CLIENT_REMEMBER_OPTIONS: u32 = 1 << 31;
+
+    // server status flag
+    pub const SERVER_STATUS_IN_TRANS: u32 = 1;
+    pub const SERVER_STATUS_AUTOCOMMIT: u32 = 2;
+    pub const SERVER_MORE_RESULTS_EXISTS: u32 = 8;
+    pub const SERVER_QUERY_NO_GOOD_INDEX_USED: u32 = 16;
+    pub const SERVER_QUERY_NO_INDEX_USED: u32 = 32;
+    pub const SERVER_STATUS_CURSOR_EXISTS: u32 = 64;
+    pub const SERVER_STATUS_LAST_ROW_SENT: u32 = 128;
+    pub const SERVER_STATUS_DB_DROPPED: u32 = 256;
+    pub const SERVER_STATUS_NO_BACKSLASH_ESCAPES: u32 = 512;
+    pub const SERVER_STATUS_METADATA_CHANGED: u32 = 1024;
+    pub const SERVER_QUERY_WAS_SLOW: u32 = 2048;
+    pub const SERVER_PS_OUT_PARAMS: u32 = 4096;
+    pub const SERVER_STATUS_IN_TRANS_READONLY: u32 = 8192;
+    pub const SERVER_SESSION_STATE_CHANGED: u16 = 1 << 14;
 
     // command
     pub const QUIT: Command = Command(0x01);
@@ -178,5 +196,27 @@ pub mod common {
         pub fn new() -> MySQLParser {
             MySQLParser {}
         }
+    }
+
+    pub fn read_len_enc_int(payload: &mut Cursor<Vec<u8>>) -> (u64, usize) {
+        let mut len = 0;
+        let mut pos = 0;
+        let mut shift = 0;
+        loop {
+            let b = payload.get_u8();
+            pos += 1;
+            len |= ((b & 0x7f) as u64) << shift;
+            if b & 0x80 == 0 {
+                break;
+            }
+            shift += 7;
+        }
+        (len, pos)
+    }
+
+    pub fn read_len_enc_str(payload: &mut Cursor<Vec<u8>>) -> (String, usize) {
+        let (len, pos) = read_len_enc_int(payload);
+        let s = String::from_utf8(payload.get_ref()[pos..(pos + len as usize)].to_vec()).unwrap();
+        (s, pos + len as usize)
     }
 }

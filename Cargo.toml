@@ -1,4 +1,4 @@
-workspace = { members = [ "config", "metrics", "network", "packets", "parser"] }
+workspace = { members = [ "config", "metrics", "session", "packets", "parser"] }
 
 [package]
 name = "rshark"
@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-network = { path = "network" }
+session = { path = "session" }
 config = { path = "config" }
 packets = { path = "packets" }
 metrics = { path = "metrics" }

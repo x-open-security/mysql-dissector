@@ -10,4 +10,4 @@ config =  { path = "../config" }
 tokio = { version = "1", features = ["full"] }
 packets = { path = "../packets" }
 log = "0.4.22"
-network = { path = "../network" }
+session = { path = "../session" }

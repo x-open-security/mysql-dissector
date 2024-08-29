@@ -1,5 +1,5 @@
 mod packet_capture;
-pub mod packet_consumer;
+mod packet_consumer;
 
 use config::Config;
 use log::info;
