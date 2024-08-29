@@ -89,5 +89,6 @@ mod test {
         assert_eq!(ok_pkt.affected_rows, 0);
         assert_eq!(ok_pkt.last_insert_id, 0);
         assert_eq!(ok_pkt.status_flags, Some(2));
+        println!("{:?}", ok_pkt)
     }
 }
