@@ -1,6 +1,7 @@
 mod ok;
 pub mod greeting;
 mod err;
+mod eof;
 
 #[derive(Debug, Default)]
 enum SessionTrackType {
