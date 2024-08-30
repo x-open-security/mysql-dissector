@@ -1,6 +1,6 @@
 use crate::mysql::common;
 use crate::mysql::common::{
-    CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, SERVER_SESSION_STATE_CHANGED,
+    CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, CLIENT_TRANSACTIONS, SERVER_SESSION_STATE_CHANGED,
 };
 use crate::mysql::server::SessionTrackType;
 use crate::Command;
@@ -41,6 +41,9 @@ impl OKPacket {
             let warnings = Some(reader.get_u16_le());
             ok_pkt.status_flags = status_flags;
             ok_pkt.warnings = warnings;
+        } else if cap & CLIENT_TRANSACTIONS > 0 {
+            let status_flags = Some(reader.get_u16_le());
+            ok_pkt.status_flags = status_flags;
         }
 
         if reader.remaining() <= 0 {
@@ -55,30 +58,41 @@ impl OKPacket {
             return None;
         }
 
-        // if cap & CLIENT_SESSION_TRACK > 0 {
-        reader.get_u8();
-        let session_track_info_type = reader.get_u8();
-        match SessionTrackType::from(session_track_info_type) {
-            SessionTrackType::SessionTrackSchema => {
-                let schema_change_length = reader.get_u8();
-                if schema_change_length > reader.remaining() as u8 {
-                    return Some(ok_pkt);
+        if SERVER_SESSION_STATE_CHANGED & ok_pkt.status_flags? > 0 {
+            reader.get_u8();
+            let session_track_info_type = reader.get_u8();
+            reader.get_u8();
+            match SessionTrackType::from(session_track_info_type) {
+                SessionTrackType::SessionTrackSchema => {
+                    let schema_change_length = reader.get_u8();
+                    if schema_change_length > reader.remaining() as u8 {
+                        return Some(ok_pkt);
+                    }
+
+                    let schema_change_info = String::from_utf8_lossy(
+                        &reader.get_ref()[reader.position() as usize
+                            ..reader.position() as usize + schema_change_length as usize],
+                    )
+                    .to_string();
+                    reader.set_position(reader.position() + schema_change_length as u64);
+                    ok_pkt.session_track_info = Some(SessionTrackInfo {
+                        r#type: SessionTrackType::SessionTrackSchema,
+                        info: "".to_string(),
+                        schema_change_info: Some(schema_change_info),
+                    });
                 }
-
-
-                let schema_change_info = String::from_utf8_lossy(&reader.get_ref()[reader.position() as usize..reader.position() as usize + schema_change_length as usize]).to_string();
-                reader.set_position(reader.position() + schema_change_length as u64);
-                ok_pkt.session_track_info = Some(SessionTrackInfo {
-                    r#type: SessionTrackType::SessionTrackSchema,
-                    info: "".to_string(),
-                    schema_change_info: Some(schema_change_info),
-                });
+                _ => {
+                    // nothing to do
+                }
             }
-            _ => {
-                // nothing to do
-            }
+        } else {
+            let session_track_info = common::read_len_enc_str(&mut reader).0;
+            ok_pkt.session_track_info = Some(SessionTrackInfo {
+                r#type: SessionTrackType::None,
+                info: session_track_info,
+                schema_change_info: None,
+            });
         }
-        // }
 
         Some(ok_pkt)
     }

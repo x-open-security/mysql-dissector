@@ -1,5 +1,6 @@
-mod general_response;
+mod ok;
 pub mod greeting;
+mod err;
 
 #[derive(Debug, Default)]
 enum SessionTrackType {
@@ -9,6 +10,7 @@ enum SessionTrackType {
     SessionTrackGtids,
     SessionTrackTransactionCharacteristics,
     SessionTrackTransactionState,
+    None
 }
 
 impl From<u8> for SessionTrackType {
@@ -19,7 +21,8 @@ impl From<u8> for SessionTrackType {
             0x3 => SessionTrackType::SessionTrackGtids,
             0x4 => SessionTrackType::SessionTrackTransactionCharacteristics,
             0x5 => SessionTrackType::SessionTrackTransactionState,
-            _ => SessionTrackType::SessionTrackSchema,
+            _ => SessionTrackType::None,
+
         }
     }
 }
