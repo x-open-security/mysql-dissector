@@ -216,7 +216,9 @@ pub mod common {
 
     pub fn read_len_enc_str(payload: &mut Cursor<Vec<u8>>) -> (String, usize) {
         let (len, pos) = read_len_enc_int(payload);
-        let s = String::from_utf8(payload.get_ref()[pos..(pos + len as usize)].to_vec()).unwrap();
+        let start = payload.position() as usize;
+        let end = start + len as usize;
+        let s = String::from_utf8(payload.get_ref()[start..end].to_vec()).unwrap();
         (s, pos + len as usize)
     }
 }
