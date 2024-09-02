@@ -1,10 +1,11 @@
-mod ok;
+pub mod ok;
 pub mod greeting;
-mod err;
-mod eof;
+pub mod err;
+pub mod eof;
+mod tabluar;
 
 #[derive(Debug, Default)]
-enum SessionTrackType {
+pub(self) enum SessionTrackType {
     #[default]
     SessionTrackSchema,
     SessionTrackStateChange,
@@ -23,7 +24,6 @@ impl From<u8> for SessionTrackType {
             0x4 => SessionTrackType::SessionTrackTransactionCharacteristics,
             0x5 => SessionTrackType::SessionTrackTransactionState,
             _ => SessionTrackType::None,
-
         }
     }
 }

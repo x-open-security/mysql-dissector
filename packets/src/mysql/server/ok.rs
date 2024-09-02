@@ -1,6 +1,6 @@
 use crate::mysql::common;
 use crate::mysql::common::{
-    CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, CLIENT_TRANSACTIONS, SERVER_SESSION_STATE_CHANGED,
+    CLIENT_PROTOCOL_41, CLIENT_TRANSACTIONS, SERVER_SESSION_STATE_CHANGED,
 };
 use crate::mysql::server::SessionTrackType;
 use crate::Command;

@@ -2,7 +2,6 @@ use crate::mysql::common::*;
 use bytes::Buf;
 use log::{error, info};
 use std::collections::HashMap;
-use std::io::prelude::*;
 use std::io::Cursor;
 #[derive(Debug, Default)]
 pub struct Login {
@@ -63,7 +62,7 @@ impl Login {
             let auth_response_length = buf.get_u8();
             login.auth_response_length = auth_response_length;
             let mut auth_response = Vec::new();
-            for i in 0..auth_response_length {
+            for _ in 0..auth_response_length {
                 auth_response.push(buf.get_u8());
             }
             login.auth_response = Some(auth_response);

@@ -37,7 +37,8 @@ impl Greeting {
         let connection_id = reader.get_u32_le();
 
         let mut auth_plugin_data = Vec::new();
-        while let c = reader.get_u8() {
+        loop {
+            let c = reader.get_u8();
             if c == 0 {
                 break;
             }
