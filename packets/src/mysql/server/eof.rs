@@ -10,8 +10,7 @@ pub struct EOFPacket {
 }
 
 impl EOFPacket {
-    pub fn new(cap: u32, payload: Vec<u8>) -> Self {
-        let mut reader = Cursor::new(payload);
+    pub fn new(cap: u32, reader: &mut Cursor<&[u8]>) -> Self {
         let header = reader.get_u8();
         let mut eof_pkt = EOFPacket {
             header: Command::from(header),

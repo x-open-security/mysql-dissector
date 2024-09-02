@@ -404,11 +404,14 @@ impl SessionManager {
                         self.create_session(session_pkt.clone());
                     }
 
-                    let res = self.parse_session_pkt(session_pkt).await;
-
-                    if let Err(e) = res {
-                        error!("Error happened: {}", e);
-                    }
+                   match   self.parse_session_pkt(session_pkt).await {
+                          Ok(_) => {
+                            // do something
+                          }
+                          Err(e) => {
+                            error!("Error happened: {}", e);
+                          }
+                   }
                 }
             }
         }

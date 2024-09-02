@@ -198,7 +198,7 @@ pub mod common {
         }
     }
 
-    pub fn read_len_enc_int(payload: &mut Cursor<Vec<u8>>) -> (u64, usize) {
+    pub fn read_len_enc_int(payload: &mut Cursor<&[u8]>) -> (u64, usize) {
         let mut len = 0;
         let mut pos = 0;
         let mut shift = 0;
@@ -214,7 +214,7 @@ pub mod common {
         (len, pos)
     }
 
-    pub fn read_len_enc_str(payload: &mut Cursor<Vec<u8>>) -> (String, usize) {
+    pub fn read_len_enc_str(payload: &mut Cursor<&[u8]>) -> (String, usize) {
         let (len, pos) = read_len_enc_int(payload);
         let start = payload.position() as usize;
         let end = start + len as usize;

@@ -1,10 +1,10 @@
-mod packet_capture;
-mod packet_consumer;
+mod capture;
+mod consumer;
 
 use config::Config;
 use log::info;
-use packet_capture::Capture;
-use packet_consumer::Consumer;
+use capture::Capture;
+use consumer::Consumer;
 
 use std::collections::HashMap;
 use tokio::sync::mpsc;
